@@ -1,0 +1,68 @@
+# Example: remote volume keys -> IR sends, with hold-to-repeat.
+# Two parts: a script that does the repeating, and an automation that starts
+# and stops it. Replace remote.YOUR_BROADLINK and the device name "soundbar"
+# with your own, and use your learned command names (volume_up, volume_down,
+# mute, ...).
+#
+# Behaviour:
+#   key DOWN (volume) : send one command, then after 500 ms repeat every 150 ms
+#   key UP / TV link lost : the script is cancelled immediately
+#   mute / power : sent once (KEY_POWER is not forwarded by default: add it to
+#                  the add-on's `keys` option if you want that branch to fire)
+#   capped at 40 repeats (about 6 s) in case a key-up is ever lost
+#
+# Why a script and not a loop inside the automation: an automation that loops
+# and waits for the key-up event can miss it if the event arrives while the loop
+# is busy sending. The loop then runs on until its cap and (in "single" mode)
+# ignores new presses. Cancelling a script from a separate trigger cannot miss.
+
+# --- script (Settings -> Automations & Scenes -> Scripts -> YAML) ---
+alias: "TV remote volume repeat"
+mode: restart
+fields:
+  command:
+    description: "Learned command name: volume_up or volume_down"
+    example: volume_up
+sequence:
+  - action: remote.send_command
+    target: { entity_id: remote.YOUR_BROADLINK }
+    data: { device: soundbar, command: "{{ command }}" }
+  - delay: { milliseconds: 500 }
+  - repeat:
+      count: 40
+      sequence:
+        - action: remote.send_command
+          target: { entity_id: remote.YOUR_BROADLINK }
+          data: { device: soundbar, command: "{{ command }}" }
+        - delay: { milliseconds: 150 }
+
+---
+# --- automation (give the script above the entity id used below) ---
+alias: "TV remote keys -> soundbar IR"
+mode: parallel
+max: 10
+max_exceeded: silent
+triggers:
+  - { trigger: event, event_type: adb_key, event_data: { key: KEY_VOLUMEUP,   state: down }, id: volume_up }
+  - { trigger: event, event_type: adb_key, event_data: { key: KEY_VOLUMEDOWN, state: down }, id: volume_down }
+  - { trigger: event, event_type: adb_key, event_data: { key: KEY_MUTE,       state: down }, id: mute }
+  - { trigger: event, event_type: adb_key, event_data: { key: KEY_POWER,      state: down }, id: power }
+  - { trigger: event, event_type: adb_key, event_data: { key: KEY_VOLUMEUP,   state: up },   id: stop }
+  - { trigger: event, event_type: adb_key, event_data: { key: KEY_VOLUMEDOWN, state: up },   id: stop }
+  - { trigger: event, event_type: adb_key_status, event_data: { status: disconnected },      id: stop }
+actions:
+  - choose:
+      - conditions: "{{ trigger.id in ['volume_up', 'volume_down'] }}"
+        sequence:
+          - action: script.turn_on
+            target: { entity_id: script.tv_remote_volume_repeat }
+            data: { variables: { command: "{{ trigger.id }}" } }
+      - conditions: "{{ trigger.id in ['mute', 'power'] }}"
+        sequence:
+          - action: remote.send_command
+            target: { entity_id: remote.YOUR_BROADLINK }
+            data: { device: soundbar, command: "{{ trigger.id }}" }
+      - conditions: "{{ trigger.id == 'stop' }}"
+        sequence:
+          - action: script.turn_off
+            target: { entity_id: script.tv_remote_volume_repeat }

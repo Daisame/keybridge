@@ -1,0 +1,28 @@
+name: "Keybridge"
+version: "0.2.0"
+slug: adb_key_listener
+description: "Fire Home Assistant events for key presses on an Android TV / Google TV remote, read from the box over network ADB."
+url: "https://github.com/Daisame/keybridge"
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: auto
+homeassistant_api: true
+options:
+  adb_host: ""
+  adb_port: 5555
+  event_type: "adb_key"
+  keys:
+    - KEY_VOLUMEUP
+    - KEY_VOLUMEDOWN
+    - KEY_MUTE
+  forward_repeat: false
+schema:
+  adb_host: "match(^([A-Za-z0-9][A-Za-z0-9.-]*)?$)"
+  adb_port: port
+  event_type: "match(^[a-z][a-z0-9_]{0,63}$)"
+  keys:
+    - "match(^[A-Za-z][A-Za-z0-9_]{0,63}$)"
+  forward_repeat: bool?
